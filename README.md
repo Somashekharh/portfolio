@@ -1,49 +1,38 @@
-# Portfolio Website for Somashekhar Hiremath
+# Portfolio 95
 
-This is a professional portfolio website for Somashekhar Hiremath, a Cybersecurity and IT Support enthusiast.
+A static personal portfolio presented as a Windows 95 desktop. It uses plain HTML, CSS, and vanilla JavaScript. No packages, build step, or server side code are required.
 
-## Technologies Used
+## Run locally
 
-*   HTML5
-*   CSS3 (with Tailwind CSS via CDN)
-*   JavaScript
-*   [particles.js](https://github.com/VincentGarreau/particles.js/) for hero section background
-*   [AOS (Animate on Scroll)](https://github.com/michalsnik/aos) for scroll animations
-*   [Feather Icons](https://feathericons.com/)
+Open `index.html` in a modern browser, or serve this folder over HTTP:
 
-## Features
+```sh
+python3 -m http.server 8000
+```
 
-*   Fully responsive, mobile-first design
-*   Cyberpunk-inspired dark theme
-*   Interactive particle background
-*   Smooth scroll animations
-*   Dynamic content rendering for projects, skills, etc. from a single JavaScript file.
+Then open `http://localhost:8000`. Serving over HTTP lets the PDF preview work consistently across browsers.
 
-## How to Deploy to GitHub Pages
+## Update portfolio content
 
-1.  **Create a new repository on GitHub.**
-2.  **Initialize a Git repository in your project folder:**
-    ```bash
-    git init
-    git branch -m main
-    ```
-3.  **Add all the files to the staging area:**
-    ```bash
-    git add .
-    ```
-4.  **Commit the files:**
-    ```bash
-    git commit -m "Initial commit"
-    ```
-5.  **Add the remote repository (replace `<your-repository-url>` with your actual repo URL):**
-    ```bash
-    git remote add origin <your-repository-url>
-    ```
-6.  **Push the files to the `main` branch:**
-    ```bash
-    git push -u origin main
-    ```
-7.  **In your repository settings on GitHub, go to the "Pages" section.**
-8.  **Select the `main` branch as the source and `/ (root)` as the folder, then click "Save".**
+Edit [`js/data.js`](js/data.js). It contains the profile, links, SEO text, education, experience, projects, repositories, skills, Oracle DBA topics, credentials, résumé path, and Recycle Bin samples. Keep dates, metrics, and URLs tied to a source you can verify. A project can omit its `github` property when it has no matching repository.
 
-Your website will be live at `https://<your-username>.github.io/<your-repository-name>/` shortly. 
+Use `js/apps.js` for desktop shortcuts, Start menu groups, window titles, icons, and default sizes. The application renderers and interactions live in `js/main.js`; shared window behavior is in `js/window-manager.js`; the simulated command prompt is in `js/terminal.js`.
+
+The current `resume/resume.pdf` is a two-page summary assembled from the résumé details in the supplied brief and the public profile because no original résumé PDF was present in the available attachments. Replace it with the original file when available; keep the same path or update `personal.resume.file` in `js/data.js`.
+
+## Desktop controls
+
+- Open desktop shortcuts with a double-click, or a single click on touch screens. Use the Start menu to browse the same apps.
+- Drag a title bar to move a window on desktop. Use the title bar buttons or taskbar buttons to minimize, restore, maximize, and close windows.
+- Right-click the desktop for arrangement and display settings. Right-click a project to move it to the simulated Recycle Bin; restore it from there.
+- Open **Display Properties** to change the desktop color, CRT scanlines, pixel texture, and optional UI sound. Preferences are saved in local browser storage.
+- Open **MS-DOS Prompt** and enter `help` for supported portfolio commands. Commands are simulated and do not run on the host computer.
+- The Shut Down menu closes or restarts this portfolio page; it does not shut down the computer.
+
+## GitHub Pages
+
+Publish the contents of this folder as the repository site root, then select the repository branch and `/ (root)` in the repository's Pages settings. All paths are relative, so the static site works both from a repository root and from a project subpath.
+
+## Assets
+
+SVG icons are in `assets/icons/`. Optional profile, project, and certificate images belong in their matching `assets/` folders. The interface does not require remote fonts, images, or JavaScript libraries.
