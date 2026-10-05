@@ -76,12 +76,6 @@
     return link;
   }
 
-  function menuBar() {
-    const bar = node('div', 'window-menubar');
-    ['File', 'Edit', 'View', 'Help'].forEach(label => bar.append(button(label, 'menubar-item')));
-    return bar;
-  }
-
   function explorerToolbar(address, includeNavigation = false) {
     const root = node('div', 'window-toolbar explorer-toolbar');
     if (includeNavigation) root.append(
@@ -708,7 +702,7 @@
     toolbar.append(open, download);
     root.append(toolbar);
     const object = node('object', 'resume-object');
-    object.data = data.resume.file;
+    object.dataset.resumeFile = data.resume.file;
     object.type = 'application/pdf';
     const fallback = node('div', 'resume-page');
     fallback.append(node('h2', '', profile.name), node('p', 'resume-headline', profile.title), node('p', '', profile.summary));
@@ -718,7 +712,6 @@
     fallbackLink.download = '';
     fallback.append(fallbackLink);
     object.append(fallback);
-    object.addEventListener('error', () => showErrorDialog('Resume.pdf could not be loaded. Check that the file exists at the configured resume path.'));
     root.append(object, node('p', 'resume-warning', data.resume.note));
     return root;
   }
@@ -731,7 +724,6 @@
   }
 
   function renderContactApp() {
-    const contact = data.contact || {};
     const root = node('div', 'app-root contact-app');
     root.append(node('h2', 'contact-heading', `Contact ${profile.name}`));
     root.append(node('p', 'contact-intro', 'Send a message or use one of these links.'));
@@ -741,11 +733,11 @@
     form.noValidate = true;
 
     const fields = [
-      ['name', 'Name', 'text', 'Your name'],
-      ['email', 'Email', 'email', 'you@example.com'],
-      ['subject', 'Subject', 'text', 'How can I help?']
+      ['name', 'Name', 'text'],
+      ['email', 'Email', 'email'],
+      ['subject', 'Subject', 'text']
     ];
-    fields.forEach(([name, labelText, type, placeholder]) => {
+    fields.forEach(([name, labelText, type]) => {
       const row = node('div', 'contact-field');
       const id = `contact-${name}`;
       const label = node('label', '', labelText);
@@ -754,7 +746,6 @@
       input.id = id;
       input.type = type;
       input.name = name;
-      input.placeholder = placeholder;
       input.required = true;
       if (name === 'email') input.autocomplete = 'email';
       if (name === 'name') input.autocomplete = 'name';
@@ -785,15 +776,16 @@
 
     const links = node('nav', 'contact-shortcuts');
     links.setAttribute('aria-label', 'Contact links');
-    if (contact.email) {
+    if (profile.email) {
       const email = node('a', 'contact-shortcut', 'Email');
-      email.href = `mailto:${contact.email}`;
+      email.href = `mailto:${profile.email}`;
       email.replaceChildren(icon('mail.svg'), node('span', '', 'Email'));
       links.append(email);
     } else {
       links.append(node('span', 'contact-unavailable', 'Email address not configured in js/data.js.'));
     }
-    [['GitHub', 'github', contact.github], ['LinkedIn', 'linkedin', contact.linkedin]].forEach(([label, key, url]) => {
+    [['GitHub', 'github'], ['LinkedIn', 'linkedin']].forEach(([label, key]) => {
+      const url = sourceLinks[key];
       if (!url) return;
       const link = node('a', 'contact-shortcut');
       link.href = url;
@@ -835,15 +827,20 @@
     ];
     for (const [field, errorText] of fields) {
       if (!field.value.trim()) {
+        field.setAttribute('aria-invalid', 'true');
         showContactNotice('Contact Me', errorText, '!', field);
         return;
       }
       if (field.type === 'email' && field.validity.typeMismatch) {
+        field.setAttribute('aria-invalid', 'true');
         showContactNotice('Contact Me', 'Please enter a valid email address.', '!', field);
         return;
       }
     }
-    fields.forEach(([field]) => { field.value = field.value.trim(); });
+    fields.forEach(([field]) => {
+      field.removeAttribute('aria-invalid');
+      field.value = field.value.trim();
+    });
 
     const endpoint = data.contact?.formspreeEndpoint || '';
     if (!endpoint) {
@@ -1244,8 +1241,23 @@
 
   window.PORTFOLIO_APP_RENDERER = renderAppContent;
   window.addEventListener('portfolio:windows-ready', () => renderExplorer('My Computer', false));
+  window.addEventListener('portfolio:window-open', event => {
+    if (event.detail?.id !== 'resume') return;
+    const object = window.portfolioWindows?.getWindow('resume')?.querySelector('.resume-object');
+    if (object && object.dataset.loaded !== 'true') {
+      object.dataset.loaded = 'true';
+      object.addEventListener('error', () => showErrorDialog('Resume.pdf could not be loaded. Check that the file exists at the configured resume path.'), { once: true });
+      object.data = object.dataset.resumeFile;
+    }
+  });
   window.addEventListener('portfolio:window-close', event => {
     if (event.detail?.id === 'confirm') pendingDelete = null;
+    if (event.detail?.id === 'contactNotice') {
+      const target = contactInvalidControl;
+      contactInvalidControl = null;
+      if (target?.isConnected) target.focus();
+      else document.querySelector('[data-app="contact"] [data-contact-send]')?.focus();
+    }
   });
   renderDesktopIcons();
   renderStartMenu();
@@ -1456,9 +1468,6 @@
   document.addEventListener('click', event => {
     if (event.target.closest('[data-contact-notice-ok]')) {
       window.portfolioWindows?.close('contactNotice');
-      const target = contactInvalidControl;
-      contactInvalidControl = null;
-      if (target?.isConnected) target.focus();
       return;
     }
     const shortcut = event.target.closest('[data-shortcut]');
@@ -1700,8 +1709,14 @@
 
   document.addEventListener('reset', event => {
     if (!event.target.matches('[data-contact-form]')) return;
+    event.target.querySelectorAll('[aria-invalid="true"]').forEach(field => field.removeAttribute('aria-invalid'));
     window.portfolioWindows?.setStatus('contact', 'Ready', '');
     contactInvalidControl = null;
+  });
+
+  document.addEventListener('input', event => {
+    const field = event.target.closest('[data-contact-form] [name]');
+    if (field) field.removeAttribute('aria-invalid');
   });
 
   document.addEventListener('keydown', event => {

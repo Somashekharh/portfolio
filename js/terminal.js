@@ -164,7 +164,9 @@
       case 'version': line('Portfolio 95 [Version 2.0]'); break;
       case 'echo': line(argument); break;
       case 'cls':
-      case 'clear': output.replaceChildren(); break;
+      case 'clear':
+        output.replaceChildren();
+        return;
       case 'exit': window.portfolioWindows?.minimize('terminal'); break;
       case 'coffee.exe': line('Coffee service is not installed. Please hydrate responsibly.', 'dim'); break;
       case 'winver': line('Portfolio 95 — static browser experience, inspired by Microsoft Windows 95.'); break;

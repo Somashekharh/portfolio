@@ -19,10 +19,7 @@ window.PORTFOLIO_DATA = {
     }
   },
   contact: {
-    formspreeEndpoint: 'https://formspree.io/f/xzedbpnd',
-    email: 'somashekharh999@gmail.com',
-    github: 'https://github.com/Somashekharh',
-    linkedin: 'https://www.linkedin.com/in/somashekharhiremath/'
+    formspreeEndpoint: 'https://formspree.io/f/xzedbpnd'
   },
   seo: {
     title: 'Somashekhar Hiremath | Portfolio 95',
@@ -34,8 +31,7 @@ window.PORTFOLIO_DATA = {
       qualification: 'Bachelor of Computer Applications',
       institution: "KLE Society's College of BCA, RLSI, Belagavi",
       period: '2023–2025',
-      result: '87.13% on LinkedIn; the resume summary in the supplied brief says 87.1%.',
-      resultNote: 'The two supplied source summaries differ slightly.'
+      result: '87.1%'
     },
     {
       qualification: 'Pre-University · PCMB',
@@ -56,21 +52,22 @@ window.PORTFOLIO_DATA = {
     },
     {
       id: 'systemtron',
-      company: 'SystemTron',
+      company: 'System Tron',
       role: 'Cybersecurity Intern',
-      period: 'Internship',
+      period: 'Mar 2025–Apr 2025',
       description: 'Hands-on cybersecurity internship covering network scanning, vulnerability assessment, controlled exploitation, incident response, system hardening and security practices.',
       highlights: [
-        'Assessed 25+ endpoints and identified 10+ critical issues, as stated in the supplied resume summary.',
-        'Worked with incident response, log analysis and home-lab security configuration.'
+        'Assessed 25+ endpoints and identified 10+ critical issues.',
+        'Supported incident response and log analysis, improving detection by 15%.',
+        'Simulated attacks and security configurations in a home lab.'
       ]
     },
     {
       id: 'deloitte',
       company: 'Deloitte Australia · Forage',
       role: 'Cybersecurity Virtual Experience',
-      period: 'Job simulation',
-      description: 'Reviewed web activity logs, supported a simulated cybersecurity breach response, and identified suspicious user activity.'
+      period: '2025',
+      description: 'Completed a cybersecurity virtual experience program analyzing breach logs and documenting incident response.'
     }
   ],
   projects: [
@@ -170,7 +167,7 @@ window.PORTFOLIO_DATA = {
     { name: 'MongoDB Basics - ICT Academy Learnathon', issuer: 'MongoDB', date: 'Oct 2023' }
   ],
   awards: [
-    { name: 'National cybersecurity competition award' }
+    { name: 'Winner, Abhimanyu’s Cyber Vyuh — National IT Fest 2025, KLS Gogte College of Commerce' }
   ],
   resume: {
     file: 'resume/resume.pdf',

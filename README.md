@@ -18,7 +18,7 @@ Edit [`js/data.js`](js/data.js). It contains the profile, links, SEO text, educa
 
 Use `js/apps.js` for desktop shortcuts, Start menu groups, window titles, icons, and default sizes. The application renderers and interactions live in `js/main.js`; shared window behavior is in `js/window-manager.js`; the simulated command prompt is in `js/terminal.js`.
 
-The current `resume/resume.pdf` is a two-page summary assembled from the résumé details in the supplied brief and the public profile because no original résumé PDF was present in the available attachments. Replace it with the original file when available; keep the same path or update `personal.resume.file` in `js/data.js`.
+The résumé viewer reads the one-page PDF at `resume/resume.pdf`. Replace that file to update the résumé, or change `resume.file` in `js/data.js`.
 
 ## Desktop controls
 
