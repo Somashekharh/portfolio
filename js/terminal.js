@@ -34,10 +34,15 @@
   }
 
   function printSkills() {
-    data.skills.forEach(group => line(`${group.category}: ${group.items.join(', ')}`));
+    data.skills.forEach(group => line(`${group.category}: ${group.items.map(item => typeof item === 'string' ? item : `${item.name} (${item.level})`).join(', ')}`));
   }
 
   function printExperience() {
+    (data.projectExperience || []).forEach(project => {
+      const endNote = project.endDateNote ? ` (${project.endDateNote.toLowerCase()})` : '';
+      line(`${project.name} (${project.startDate} – ${project.endDate}${endNote})`);
+      line(`  ${project.description}`);
+    });
     data.experience.forEach(entry => line(`${entry.company} — ${entry.role} (${entry.period})`));
   }
 
@@ -46,6 +51,8 @@
   }
 
   function printCertificates() {
+    (data.training || []).forEach(item => line(`${item.name} — ${item.status || 'Completed training'}${item.issuer ? ` · ${item.issuer}` : ''}${item.date ? ` · ${item.date}` : ''}`));
+    (data.learningInProgress || []).forEach(item => line(`${item.name} — ${item.provider ? `${item.provider} · ` : ''}${item.status || 'In progress'}`));
     data.certifications.forEach(cert => line(`${cert.name} — ${cert.issuer}, ${cert.date}`));
   }
 
@@ -73,7 +80,7 @@
       '  skills         list technical skills by category',
       '  experience     list experience entries',
       '  education      list education',
-      '  certifications list credentials',
+      '  certifications list training, learning in progress and credentials',
       '  oracle         show database administration topics',
       '  cybersecurity  show security focus areas',
       '  resume         open the résumé viewer',
@@ -105,7 +112,10 @@
         line(profile.name);
         line(profile.title);
         break;
-      case 'about': line(profile.summary); break;
+      case 'about':
+        line(data.experienceSummary.exposure);
+        line(data.experienceSummary.interests);
+        break;
       case 'projects': printProjects(); break;
       case 'skills': printSkills(); break;
       case 'experience': printExperience(); break;
@@ -164,7 +174,9 @@
       case 'version': line('Portfolio 95 [Version 2.0]'); break;
       case 'echo': line(argument); break;
       case 'cls':
-      case 'clear': output.replaceChildren(); break;
+      case 'clear':
+        output.replaceChildren();
+        return;
       case 'exit': window.portfolioWindows?.minimize('terminal'); break;
       case 'coffee.exe': line('Coffee service is not installed. Please hydrate responsibly.', 'dim'); break;
       case 'winver': line('Portfolio 95 — static browser experience, inspired by Microsoft Windows 95.'); break;

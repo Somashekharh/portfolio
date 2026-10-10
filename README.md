@@ -14,11 +14,17 @@ Then open `http://localhost:8000`. Serving over HTTP lets the PDF preview work c
 
 ## Update portfolio content
 
-Edit [`js/data.js`](js/data.js). It contains the profile, links, SEO text, education, experience, projects, repositories, skills, Oracle DBA topics, credentials, résumé path, and Recycle Bin samples. Keep dates, metrics, and URLs tied to a source you can verify. A project can omit its `github` property when it has no matching repository.
+Edit [`js/data.js`](js/data.js). It contains the profile, links, SEO text, experience summary, education, employment history, project assignments, projects, repositories, skills, completed training, learning in progress, credentials, résumé path, and Recycle Bin samples. Keep dates, metrics, and URLs tied to a source you can verify. A project can omit its `github` property when it has no matching repository.
+
+Project assignments are stored in `projectExperience`; the employer and virtual program records remain in `experience`. The supplied Alaska end date is labeled as scheduled. Skills marked **Basic** or **Learning** carry those labels in the Skills window; other skills do not use invented proficiency scores. Completed training is shown separately from learning in progress and from the existing credential list.
 
 Use `js/apps.js` for desktop shortcuts, Start menu groups, window titles, icons, and default sizes. The application renderers and interactions live in `js/main.js`; shared window behavior is in `js/window-manager.js`; the simulated command prompt is in `js/terminal.js`.
 
-The current `resume/resume.pdf` is a two-page summary assembled from the résumé details in the supplied brief and the public profile because no original résumé PDF was present in the available attachments. Replace it with the original file when available; keep the same path or update `personal.resume.file` in `js/data.js`.
+The résumé viewer reads `resume/resume.pdf`, whose text content is exported from `resume.html`. The interactive résumé summaries read `js/data.js`; keep those portfolio records aligned when updating professional facts.
+
+## ATS and accessible résumé
+
+`resume.html` is the plain, semantic, single-column résumé for recruiters, screen readers, and applicant tracking systems. It is available at the site-root path `resume.html`, from the desktop and Start menu as **Text Resume**, and in the résumé viewer. `resume/resume.pdf` is exported from that HTML and contains the same content. When changing résumé facts, update `resume.html`, print it to an A4 PDF, and replace `resume/resume.pdf`; update `js/data.js` for the interactive Windows 95 portfolio views. The standalone page uses standard headings and lists, selectable text, no tables or columns, and print styles.
 
 ## Desktop controls
 
@@ -31,7 +37,7 @@ The current `resume/resume.pdf` is a two-page summary assembled from the résum�
 
 ## GitHub Pages
 
-Publish the contents of this folder as the repository site root, then select the repository branch and `/ (root)` in the repository's Pages settings. All paths are relative, so the static site works both from a repository root and from a project subpath.
+This repository includes a GitHub Actions deployment workflow at `.github/workflows/static.yml`. In **Settings → Pages**, set the deployment source to **GitHub Actions**. The workflow publishes the repository root when changes are pushed to `main`, and it can also be run manually from the Actions tab. All asset paths are relative, so the site works as a project site as well as from a domain root. The canonical URL and profile links currently use `https://somashekharh.github.io/portfolio/`; update those if the repository URL changes.
 
 ## Assets
 
