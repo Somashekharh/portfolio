@@ -10,34 +10,37 @@ window.PORTFOLIO_DATA = {
     username: 'Somashekhar',
     title: 'Oracle DBA | Cloud & Infrastructure Engineer',
     location: 'Mumbai Metropolitan Region, India',
-    summary: 'Oracle DBA and cloud/infrastructure professional with a cybersecurity and IT support foundation. Hands-on experience includes vulnerability assessment, log analysis, Linux, networking and virtualized security labs, with continued learning across databases, cloud and security.',
     email: 'somashekharh999@gmail.com',
     links: {
       github: 'https://github.com/Somashekharh',
       linkedin: 'https://www.linkedin.com/in/somashekharhiremath/',
-      portfolio: 'https://somashekharh.github.io/portfolio/'
+      portfolio: 'https://somashekharh.github.io/portfolio/',
+      textResume: 'resume.html'
     }
   },
   contact: {
     formspreeEndpoint: 'https://formspree.io/f/xzedbpnd'
   },
   seo: {
-    title: 'Somashekhar Hiremath | Portfolio 95',
-    description: "Explore Somashekhar Hiremath's work in Oracle database administration, cloud infrastructure and cybersecurity inside an interactive Windows 95 desktop.",
-    keywords: 'Somashekhar Hiremath, Oracle DBA, cloud infrastructure, cybersecurity, portfolio'
+    title: 'Somashekhar Hiremath | Oracle DBA Portfolio',
+    description: 'Somashekhar Hiremath — Oracle DBA and Cloud & Infrastructure Engineer. Explore experience, database skills, projects, education, and training.',
+    keywords: 'Somashekhar Hiremath, Oracle DBA, Oracle Database 19c, Oracle Enterprise Manager, RMAN, Linux, cloud infrastructure, database modernization'
+  },
+  experienceSummary: {
+    exposure: 'Technical background includes Oracle Database 19c, Oracle Enterprise Manager (OEM), SQL, RMAN, Data Guard concepts, Data Pump, Linux/Unix administration, Shell scripting, and Power BI.',
+    interests: 'Strong interest in Oracle Database Administration, Linux, automation, DevOps, and Azure database administration, supported by continuous learning through technical courses and practical lab work.',
+    technologies: ['Oracle Database 19c', 'OEM', 'SQL', 'RMAN', 'Data Guard concepts', 'Data Pump', 'Linux/Unix', 'Shell scripting', 'Power BI']
   },
   education: [
     {
-      qualification: 'Bachelor of Computer Applications',
-      institution: "KLE Society's College of BCA, RLSI, Belagavi",
-      period: '2023–2025',
-      result: '87.1%'
+      qualification: 'Bachelor of Computer Applications (BCA)',
+      institution: 'KLE Society’s College of BCA, Belagavi',
+      period: '2023–2025'
     },
     {
-      qualification: 'Pre-University · PCMB',
+      qualification: 'Pre-University — PCMB',
       institution: 'Government PU College, Bailhongal',
-      period: '2020–2022',
-      result: '81%'
+      period: '2020–2022'
     }
   ],
   experience: [
@@ -47,7 +50,6 @@ window.PORTFOLIO_DATA = {
       role: 'Oracle DBA | Cloud & Infrastructure Engineer',
       period: 'Current',
       location: 'Mumbai, India',
-      description: 'Current professional direction in Oracle database administration and cloud & infrastructure engineering, listed on the public profile.',
       highlights: []
     },
     {
@@ -68,6 +70,41 @@ window.PORTFOLIO_DATA = {
       role: 'Cybersecurity Virtual Experience',
       period: '2025',
       description: 'Completed a cybersecurity virtual experience program analyzing breach logs and documenting incident response.'
+    }
+  ],
+  // Project assignments are distinct from employer and virtual experience
+  // records above. Keep the source dates exactly as supplied.
+  projectExperience: [
+    {
+      id: 'cis-fmb-app-dev-coe',
+      name: 'CIS-FMB-App Dev COE',
+      startDate: '20-Aug-2026',
+      endDate: '20-Aug-2026',
+      description: 'Cloud and infrastructure management engagement supporting application development and operational activities within the CIS-FMB App Dev Centre of Excellence.',
+      contributions: [
+        'Support Oracle database and infrastructure operational activities for assigned environments.',
+        'Monitor database availability, storage utilization, sessions, alerts, listener connectivity, backup status, and general health using OEM and SQL checks.',
+        'Assist with user access, role and privilege administration, account troubleshooting, and adherence to access-control procedures.',
+        'Investigate incidents and service requests, document observations, provide status updates, and coordinate with application and infrastructure teams.',
+        'Use Linux/Unix, SQL, Shell, and PowerShell utilities for troubleshooting and recurring operational checks.',
+        'Maintain handover notes, technical documentation, and operational reports.'
+      ]
+    },
+    {
+      id: 'cis-fmb-alaska-modernization',
+      name: 'CIS-FMB-Alaska Database Modernization',
+      startDate: '11-Dec-2025',
+      endDate: '31-Dec-2026',
+      endDateNote: 'Scheduled end date',
+      description: 'Database modernization engagement within Cloud & Infrastructure, supporting assessment, operational readiness, database administration, validation, coordination, and reporting activities for the Alaska environment.',
+      contributions: [
+        'Assist with database inventory, configuration review, readiness checks, and technical information collection for modernization activities.',
+        'Support database health checks, capacity review, backup validation, connectivity verification, and pre-change or post-change validation.',
+        'Coordinate with database, application, cloud, and infrastructure teams during planned modernization and change activities.',
+        'Prepare SQL-based reports and structured updates covering database growth, backup, inventory, and operational observations.',
+        'Follow incident, change, security, access-control, and documentation processes to support traceable delivery.',
+        'Contribute to reusable scripts, checklists, and reporting templates to improve consistency and reduce manual effort.'
+      ]
     }
   ],
   projects: [
@@ -130,14 +167,22 @@ window.PORTFOLIO_DATA = {
     { name: 'portfolio', description: 'Personal portfolio website repository.', url: 'https://github.com/Somashekharh/portfolio' }
   ],
   skills: [
-    { category: 'Database', items: ['Oracle Database', 'SQL', 'PL/SQL', 'RMAN', 'Database Administration'] },
-    { category: 'Cybersecurity', items: ['Nmap', 'Wireshark', 'Metasploit', 'IDS/IPS', 'VirusTotal', 'Vulnerability Assessment', 'Incident Response', 'Log Analysis'] },
-    { category: 'Linux', items: ['Linux', 'Kali Linux', 'Ubuntu', 'Bash'] },
-    { category: 'Networking', items: ['TCP/IP', 'Subnetting', 'Firewalls', 'Wi-Fi'] },
-    { category: 'Programming', items: ['Python', 'Bash', 'SQL', 'JavaScript'] },
-    { category: 'Virtualization', items: ['VMware', 'VirtualBox'] },
-    { category: 'Cloud', items: ['AWS', 'Azure', 'Oracle Cloud Infrastructure'] },
-    { category: 'Tools', items: ['Git', 'GitHub', 'AnyDesk'] }
+    { category: 'Database', items: [
+      'Oracle Database 19c', 'Oracle SQL',
+      'Oracle Enterprise Manager (OEM)', 'RMAN',
+      'Data Guard concepts', 'Data Pump',
+      'Backup and recovery', 'User and privilege management', 'Listener and connectivity troubleshooting'
+    ] },
+    { category: 'Operating Systems', items: ['Linux', 'Unix', 'RHEL', 'Ubuntu', 'Windows'] },
+    { category: 'Automation and DevOps', items: ['Shell scripting', { name: 'Ansible', level: 'Basic' }, { name: 'Jenkins', level: 'Learning' }, 'SSH', 'Git and GitHub fundamentals', 'PL/SQL'] },
+    { category: 'Reporting and Tools', items: ['Power BI', 'Excel', 'HTML reporting', 'SQL Developer', 'Toad', 'PuTTY', 'WinSCP', 'VS Code'] },
+    { category: 'Service Management', items: ['Incident management', 'Change management', 'Production support', 'Operational reporting', 'Documentation', 'Stakeholder coordination'] },
+    { category: 'Professional Skills', items: ['Troubleshooting', 'Ownership', 'Collaboration', 'Continuous learning', 'Security awareness', 'Attention to detail'] },
+    { category: 'Languages', items: ['English', 'Hindi', 'Kannada'] },
+    { category: 'Cybersecurity', items: ['Kali Linux', 'Nmap', 'Wireshark', 'Metasploit', 'IDS/IPS', 'VirusTotal', 'Vulnerability Assessment', 'Incident Response', 'Log Analysis'] },
+    { category: 'Networking', items: ['TCP/IP', 'Subnetting', 'Firewalls'] },
+    { category: 'Cloud and Virtualization', items: ['AWS', 'Azure', 'VMware', 'VirtualBox'] },
+    { category: 'Programming', items: ['Python', 'Bash'] }
   ],
   oracle: {
     overview: 'Oracle DBA and cloud infrastructure are the current professional direction shown on the supplied LinkedIn profile.',
@@ -153,15 +198,22 @@ window.PORTFOLIO_DATA = {
     ],
     projects: []
   },
+  training: [
+    { name: 'Oracle Database Foundations', status: 'Completed training' },
+    { name: 'Linux Fundamentals', issuer: 'Packt', date: 'Jan 2026', status: 'Completed training' },
+    { name: 'Foundations of Oracle Database Administration', status: 'Completed training' },
+    { name: 'Google Cybersecurity Specialization', issuer: 'Google', date: 'Apr 2024', status: 'Completed training' },
+    { name: 'Fundamentals of Ansible', issuer: 'Red Hat', date: 'Jul 2026', status: 'Completed training' }
+  ],
+  learningInProgress: [
+    { name: 'IBM Applied DevOps Engineering Specialization', provider: 'Coursera', status: 'In progress' },
+    { name: 'Claude Certified Developer Foundations', provider: 'Preparatory', status: 'In progress' }
+  ],
   certifications: [
-    { name: 'Fundamentals of Ansible', issuer: 'Red Hat', date: 'Jul 2026' },
-    { name: 'Linux Fundamental', issuer: 'Packt', date: 'Jan 2026' },
     { name: 'LFS101: Introduction to Linux', issuer: 'The Linux Foundation', date: 'Dec 2025' },
-    { name: 'Oracle Cloud Infrastructure 2025 Certified AI Foundations Associate', issuer: 'Oracle', date: '2025' },
     { name: 'Information Technology Fundamentals', issuer: 'IBM SkillsBuild', date: 'Jun 2025' },
     { name: 'Deloitte Australia - Cyber Job Simulation', issuer: 'Forage', date: 'May 2025' },
     { name: 'Computer Hardware Basics', issuer: 'Cisco', date: 'Apr 2024' },
-    { name: 'Google Cybersecurity Specialization', issuer: 'Google', date: 'Apr 2024' },
     { name: 'Google IT Automation with Python Specialization', issuer: 'Google', date: 'Feb 2024' },
     { name: 'Introduction to Cybersecurity', issuer: 'Cisco', date: 'Jan 2024' },
     { name: 'MongoDB Basics - ICT Academy Learnathon', issuer: 'MongoDB', date: 'Oct 2023' }
@@ -171,7 +223,8 @@ window.PORTFOLIO_DATA = {
   ],
   resume: {
     file: 'resume/resume.pdf',
-    note: 'This portfolio PDF is a concise summary assembled from the supplied brief and public profile. Replace it with the original resume PDF when available.'
+    htmlFile: 'resume.html',
+    note: 'The PDF and text résumé contain the same recruiter-friendly résumé. Use the text version for the easiest screen-reader and ATS parsing.'
   },
   recycleBin: [
     { name: 'old_resume.doc', kind: 'document', note: 'A very early draft. Replaced by a much better version.' },

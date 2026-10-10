@@ -9,6 +9,7 @@
   const contextMenu = document.querySelector('[data-context-menu]');
   const profile = data.personal;
   const sourceLinks = profile.links;
+  const feedbackStorageKey = 'portfolio95-feedback-submitted';
   const initials = profile.initials || profile.name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
   const currentExperience = data.experience.find(entry => entry.period === 'Current') || data.experience[0] || null;
   const userDirectory = profile.username || profile.name.split(/\s+/)[0];
@@ -21,13 +22,14 @@
 
   document.title = data.seo?.title || `${profile.name} | Portfolio 95`;
   document.querySelector('meta[name="author"]')?.setAttribute('content', profile.name);
-  document.querySelector('meta[name="description"]')?.setAttribute('content', data.seo?.description || profile.summary);
+  document.querySelector('meta[name="description"]')?.setAttribute('content', data.seo?.description || data.experienceSummary.exposure);
   document.querySelector('meta[name="keywords"]')?.setAttribute('content', data.seo?.keywords || 'portfolio');
   document.querySelector('meta[property="og:title"]')?.setAttribute('content', document.title);
-  document.querySelector('meta[property="og:description"]')?.setAttribute('content', data.seo?.description || profile.summary);
+  document.querySelector('meta[property="og:description"]')?.setAttribute('content', data.seo?.description || data.experienceSummary.exposure);
   document.querySelector('[data-boot-credit]').textContent = profile.name;
   const timers = [];
   let contextTarget = null;
+  let propertiesTarget = null;
   let explorerPath = 'My Computer';
   let explorerHistory = ['My Computer'];
   let deletedProjectIds = new Set();
@@ -35,10 +37,22 @@
   let virtualFolders = [];
   let selectedCertificateIndex = 0;
   let errorMessage = 'The requested item could not be opened.';
+  let errorTitle = 'Error';
+  let unavailableErrorIndex = 0;
+  let lastUnavailableErrorAt = 0;
   let contactNotice = { title: 'Contact Me', message: '', symbol: '!' };
   let contactInvalidControl = null;
   let resumeCheckPending = false;
   let pendingDelete = null;
+  let feedbackSubmitted = (() => {
+    try { return sessionStorage.getItem(feedbackStorageKey) === 'yes'; }
+    catch (_) { return false; }
+  })();
+  let feedbackPromptSeen = false;
+  let feedbackTimer = null;
+  let feedbackActiveMs = 0;
+  let feedbackLastTick = Date.now();
+  let feedbackRequestInFlight = false;
 
   function node(tag, className = '', text) {
     const item = document.createElement(tag);
@@ -150,8 +164,8 @@
       routeItem('Users', 'folder.svg', 'C:\\Users'),
       routeItem('Projects', 'folder.svg', 'C:\\Projects', `${data.projects.length} project folders`),
       appItem('Resume.pdf', 'document.svg', 'resume'),
-      routeItem('Certificates', 'folder.svg', 'C:\\Certificates', `${data.certifications.length} certificates`),
-      routeItem('Experience', 'folder.svg', 'C:\\Experience', `${data.experience.length} entries`),
+      routeItem('Certificates', 'folder.svg', 'C:\\Certificates', `${(data.training || []).length + (data.learningInProgress || []).length + data.certifications.length} items`),
+      routeItem('Experience', 'folder.svg', 'C:\\Experience', `${(data.projectExperience || []).length + data.experience.length} entries`),
       routeItem('Skills', 'folder.svg', 'C:\\Skills', `${data.skills.length} categories`),
       ...virtualFolders.map(folder => routeItem(folder, 'folder.svg', `C:\\${folder}`))
     ];
@@ -171,20 +185,27 @@
       project: project.id,
       context: { type: 'project', id: project.id }
     }));
-    if (path === 'C:\\Certificates') return data.certifications.map((cert, index) => ({
-      name: cert.name,
-      icon: 'certificate.svg',
-      detail: `${cert.issuer} · ${cert.date}`,
-      certificate: index,
-      context: { type: 'certificate', id: String(index) }
-    }));
-    if (path === 'C:\\Experience') return data.experience.map(entry => ({
+    if (path === 'C:\\Certificates') return [
+      ...(data.training || []).map(item => ({ name: item.name, icon: 'document.svg', detail: 'Completed training', app: 'certificates' })),
+      ...(data.learningInProgress || []).map(item => ({ name: item.name, icon: 'notepad.svg', detail: item.status || 'In progress', app: 'certificates' })),
+      ...data.certifications.map((cert, index) => ({
+        name: cert.name,
+        icon: 'certificate.svg',
+        detail: [cert.issuer, cert.date].filter(Boolean).join(' · '),
+        certificate: index,
+        context: { type: 'certificate', id: String(index) }
+      }))
+    ];
+    if (path === 'C:\\Experience') return [
+      ...(data.projectExperience || []).map(project => ({ name: project.name, icon: 'document.svg', detail: `${project.startDate} — ${project.endDate}`, app: 'experience' })),
+      ...data.experience.map(entry => ({
       name: entry.company,
       icon: 'document.svg',
       detail: entry.role,
       app: 'experience',
       context: { type: 'experience', id: entry.id }
-    }));
+      }))
+    ];
     if (path === 'C:\\Skills') return data.skills.map(category => ({ name: category.category, icon: 'control.svg', app: 'skills' }));
     if (path.startsWith('C:\\') && virtualFolders.includes(path.slice(3))) return [];
     if (path === 'D:\\') return [
@@ -229,16 +250,24 @@
   function renderDesktopIcons() {
     iconRoot.replaceChildren();
     appConfig.desktop.forEach(shortcut => {
+      const wrapper = node('div', 'desktop-shortcut');
+      wrapper.dataset.shortcutLabel = shortcut.label;
       const item = button('', 'desktop-icon');
       item.dataset.shortcut = '';
-      item.dataset.shortcutLabel = shortcut.label;
       item.dataset.shortcutType = shortcut.app ? 'app' : 'external';
       if (shortcut.app) item.dataset.shortcutApp = shortcut.app;
       if (shortcut.external) item.dataset.shortcutExternal = shortcut.external;
       const app = shortcut.app && appConfig.registry[shortcut.app];
       item.append(icon(shortcut.icon || app?.icon || 'folder.svg'));
       item.append(node('span', '', shortcut.label));
-      iconRoot.append(item);
+      const menu = button('⋮', 'shortcut-menu-button', {
+        dataset: { shortcutMenu: '' },
+        'aria-label': `More options for ${shortcut.label}`,
+        'aria-haspopup': 'menu',
+        title: 'Shortcut options'
+      });
+      wrapper.append(item, menu);
+      iconRoot.append(wrapper);
     });
   }
 
@@ -287,9 +316,61 @@
     menuRoot.append(shutdown);
   }
 
+  function closeStartSubmenus(except = null) {
+    menuRoot.querySelectorAll('[data-start-parent]').forEach(parent => {
+      if (parent === except) return;
+      parent.setAttribute('aria-expanded', 'false');
+      const submenu = parent.parentElement.querySelector('.start-submenu');
+      if (submenu) {
+        submenu.hidden = true;
+        submenu.classList.remove('is-open');
+      }
+    });
+  }
+
+  function positionStartSubmenu(parent, submenu) {
+    if (window.matchMedia('(max-width: 650px)').matches) {
+      submenu.style.removeProperty('left');
+      submenu.style.removeProperty('top');
+      return;
+    }
+    submenu.style.left = '0px';
+    submenu.style.top = '0px';
+    const anchor = parent.getBoundingClientRect();
+    const bounds = submenu.getBoundingClientRect();
+    const edge = 5;
+    const taskbarHeight = document.querySelector('.taskbar')?.getBoundingClientRect().height || 30;
+    const rightSpace = window.innerWidth - anchor.right - edge;
+    const left = rightSpace >= bounds.width
+      ? anchor.right - 1
+      : Math.max(edge, anchor.left - bounds.width + 1);
+    const maxTop = Math.max(edge, window.innerHeight - taskbarHeight - bounds.height - edge);
+    const top = Math.max(edge, Math.min(anchor.top - 3, maxTop));
+    submenu.style.left = `${left}px`;
+    submenu.style.top = `${top}px`;
+  }
+
+  function repositionOpenStartSubmenus() {
+    menuRoot.querySelectorAll('[data-start-parent][aria-expanded="true"]').forEach(parent => {
+      positionStartSubmenu(parent, parent.parentElement.querySelector('.start-submenu'));
+    });
+  }
+
+  function closeStartMenu() {
+    document.querySelector('[data-start-menu]').hidden = true;
+    document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
+    closeStartSubmenus();
+  }
+
   function appToolbar(labels) {
     const toolbar = node('div', 'window-toolbar');
-    labels.forEach(label => toolbar.append(node('span', 'toolbar-label', label)));
+    labels.forEach(label => {
+      const item = button(label, 'toolbar-label toolbar-menu-item', {
+        dataset: { unavailable: '', unavailableLabel: label },
+        title: `${label} menu is decorative in this portfolio`
+      });
+      toolbar.append(item);
+    });
     return toolbar;
   }
 
@@ -306,6 +387,8 @@
       case 'resume': return renderResumeApp();
       case 'contact': return renderContactApp();
       case 'contactNotice': return renderContactNotice();
+      case 'feedback': return renderFeedbackApp();
+      case 'properties': return renderPropertiesApp();
       case 'terminal': return renderTerminalApp();
       case 'oracle': return renderOracleApp();
       case 'browser': return renderBrowserApp();
@@ -356,12 +439,32 @@
     const root = explorerAppRoot('C:\\Experience');
     const pane = node('div', 'window-body explorer-pane');
     pane.append(node('h2', 'explorer-heading', 'Career & professional experience'));
+    if (data.projectExperience?.length) {
+      pane.append(node('h3', 'experience-section-heading', 'Project experience'));
+      const projectRecords = node('div', 'records project-experience-records');
+      data.projectExperience.forEach(project => {
+        const card = node('article', 'record-row experience-project');
+        card.append(node('h3', '', project.name));
+        const dates = [project.startDate && `Start date: ${project.startDate}`, project.endDate && `End date: ${project.endDate}${project.endDateNote ? ` (${project.endDateNote.toLowerCase()})` : ''}`].filter(Boolean);
+        card.append(node('p', 'record-meta experience-dates', dates.join(' · ')));
+        card.append(node('p', '', project.description));
+        if (project.contributions?.length) {
+          card.append(node('p', 'record-section-label', 'Role and contributions'));
+          const list = node('ul', 'experience-contributions');
+          project.contributions.forEach(contribution => list.append(node('li', '', contribution)));
+          card.append(list);
+        }
+        projectRecords.append(card);
+      });
+      pane.append(projectRecords);
+    }
+    pane.append(node('h3', 'experience-section-heading', 'Employment and virtual experience'));
     const records = node('div', 'records');
     data.experience.forEach(entry => {
       const card = node('article', 'record-row');
       card.append(node('h3', '', `${entry.company} — ${entry.role}`));
       card.append(node('p', 'record-meta', [entry.period, entry.location].filter(Boolean).join(' · ')));
-      card.append(node('p', '', entry.description || ''));
+      if (entry.description) card.append(node('p', '', entry.description));
       if (entry.technologies?.length) {
         card.append(node('p', 'record-section-label', 'Tools and technologies'));
         const tags = node('div', 'tag-row');
@@ -380,7 +483,7 @@
     pane.append(records);
     root.append(pane);
     const status = node('div', 'window-status');
-    status.append(node('span', '', `${data.experience.length} entries`), node('span', '', 'Career file'));
+    status.append(node('span', '', `${data.projectExperience?.length || 0} projects · ${data.experience.length} roles`), node('span', '', 'Career file'));
     root.append(status);
     return root;
   }
@@ -462,8 +565,6 @@
     wrap.append(facts);
     panel.append(wrap);
     const copy = node('div', 'system-copy');
-    copy.append(node('h3', '', 'Professional Summary'));
-    copy.append(node('p', '', profile.summary));
     copy.append(node('h3', '', 'Portfolio Overview'));
     copy.append(node('p', '', 'This desktop organizes professional experience, projects, skills, education and credentials as folders and applications.'));
     panel.append(copy);
@@ -472,11 +573,25 @@
 
   function systemProfessionalPanel() {
     const panel = systemPanel('professional', 'Professional');
-    panel.append(node('h3', '', 'Professional Summary'), node('p', 'system-copy', profile.summary));
+    appendExperienceSummary(panel);
+    const shortcuts = node('div', 'experience-shortcuts');
+    shortcuts.append(button('Open Experience', 'classic-button', { dataset: { openWindow: 'experience' } }));
+    shortcuts.append(button('Open Skills', 'classic-button', { dataset: { openWindow: 'skills' } }));
+    panel.append(shortcuts);
+    if (data.projectExperience?.length) {
+      panel.append(node('h3', 'system-section-heading', 'Current project assignments'));
+      data.projectExperience.forEach(project => {
+        const card = node('article', 'record-row compact-project-record');
+        card.append(node('h3', '', project.name));
+        card.append(node('p', 'record-meta', `${project.startDate} — ${project.endDate}${project.endDateNote ? ` (${project.endDateNote.toLowerCase()})` : ''}`));
+        panel.append(card);
+      });
+    }
     if (currentExperience) {
-      panel.append(node('h3', 'system-section-heading', 'Current Direction'));
+      panel.append(node('h3', 'system-section-heading', 'Current Role'));
       const current = node('article', 'record-row');
-      current.append(node('h3', '', `${currentExperience.company} · ${currentExperience.role}`), node('p', 'record-meta', [currentExperience.period, currentExperience.location].filter(Boolean).join(' · ')), node('p', '', currentExperience.description));
+      current.append(node('h3', '', `${currentExperience.company} · ${currentExperience.role}`), node('p', 'record-meta', [currentExperience.period, currentExperience.location].filter(Boolean).join(' · ')));
+      if (currentExperience.description) current.append(node('p', '', currentExperience.description));
       panel.append(current);
     }
     const previousExperience = data.experience.filter(entry => entry !== currentExperience);
@@ -502,13 +617,30 @@
     return panel;
   }
 
+  function appendExperienceSummary(container) {
+    const summary = node('section', 'experience-summary');
+    summary.append(node('h3', '', 'Experience Summary'));
+    summary.append(node('p', '', data.experienceSummary.exposure));
+    const tags = node('div', 'tag-row experience-summary-tags');
+    data.experienceSummary.technologies.forEach(technology => tags.append(node('span', 'classic-tag', technology)));
+    summary.append(tags);
+    summary.append(node('p', 'experience-interest', data.experienceSummary.interests));
+    container.append(summary);
+  }
+
   function renderSkillCategories(container, categories = data.skills) {
     const grid = node('div', 'category-list');
     categories.forEach(category => {
       const box = node('section', 'category-box');
       box.append(node('h3', '', category.category));
       const list = node('ul', 'skill-tree');
-      category.items.forEach(skill => list.append(node('li', '', skill)));
+      category.items.forEach(skill => {
+        const item = typeof skill === 'string' ? { name: skill } : skill;
+        const row = node('li', '');
+        row.append(node('span', 'skill-name', item.name));
+        if (item.level) row.append(node('span', `skill-level ${item.level.toLowerCase().replace(/[^a-z]+/g, '-')}`, item.level));
+        list.append(row);
+      });
       box.append(list);
       grid.append(box);
     });
@@ -527,7 +659,8 @@
       const card = node('article', 'record-row');
       card.append(node('h3', '', item.qualification), node('p', 'record-meta', item.institution));
       const line = node('div', 'resume-line');
-      line.append(node('span', '', item.period), node('span', 'education-score', item.result));
+      line.append(node('span', '', item.period));
+      if (item.result) line.append(node('span', 'education-score', item.result));
       card.append(line);
       if (item.resultNote) card.append(node('p', 'conflict-note', item.resultNote));
       records.append(card);
@@ -562,7 +695,7 @@
     renderSkillCategories(pane);
     root.append(pane);
     const status = node('div', 'window-status');
-    status.append(node('span', '', `${data.skills.reduce((n, category) => n + category.items.length, 0)} items`), node('span', '', 'No proficiency percentages'));
+    status.append(node('span', '', `${data.skills.reduce((n, category) => n + category.items.length, 0)} skills`), node('span', '', 'No proficiency percentages'));
     root.append(status);
     return root;
   }
@@ -585,13 +718,34 @@
     const pane = node('div', 'window-body explorer-pane');
     pane.append(node('h2', 'explorer-heading', 'Certificates and learning'));
     const note = node('div', 'empty-copy');
-    note.append(node('span', '', 'The public profile lists these credentials. Individual credential URLs were not supplied. '));
-    const profileLink = node('a', '', 'Open LinkedIn profile');
-    profileLink.href = sourceLinks.linkedin;
-    profileLink.target = '_blank';
-    profileLink.rel = 'noopener noreferrer';
-    note.append(profileLink);
+    note.append(node('span', '', 'Training and learning details are listed as supplied. Certificate IDs and verification links are not claimed unless provided.'));
     pane.append(note);
+    pane.append(node('h3', 'experience-section-heading', 'Completed Training'));
+    const trainingList = node('div', 'training-list');
+    (data.training || []).forEach(item => {
+      const row = node('article', 'training-record');
+      row.append(icon('document.svg'));
+      const details = node('div', 'training-copy');
+      details.append(node('strong', '', item.name));
+      if (item.issuer || item.date) details.append(node('small', '', [item.issuer, item.date].filter(Boolean).join(' · ')));
+      row.append(details, node('span', 'learning-badge completed', 'Completed training'));
+      trainingList.append(row);
+    });
+    pane.append(trainingList);
+    pane.append(node('h3', 'experience-section-heading', 'Learning in Progress'));
+    const learningList = node('div', 'training-list learning-list');
+    (data.learningInProgress || []).forEach(item => {
+      const row = node('article', 'training-record');
+      row.append(icon('notepad.svg'));
+      const details = node('div', 'training-copy');
+      details.append(node('strong', '', item.name));
+      if (item.provider) details.append(node('small', '', item.provider));
+      row.append(details, node('span', 'learning-badge in-progress', item.status || 'In progress'));
+      learningList.append(row);
+    });
+    pane.append(learningList);
+    pane.append(node('h3', 'experience-section-heading', 'Other Credentials'));
+    pane.append(node('p', 'empty-copy credential-note', 'These entries are retained from the existing portfolio. Individual verification URLs are only shown when available.'));
     const grid = node('div', 'cert-grid');
     data.certifications.forEach((cert, index) => {
       const item = button('', 'certificate-file');
@@ -610,7 +764,7 @@
     pane.append(grid);
     root.append(pane);
     const status = node('div', 'window-status');
-    status.append(node('span', '', `${data.certifications.length} credentials`), node('span', '', 'C:\\Certificates'));
+    status.append(node('span', '', `${(data.training || []).length} training · ${(data.learningInProgress || []).length} in progress · ${data.certifications.length} credentials`), node('span', '', 'C:\\Certificates'));
     root.append(status);
     return root;
   }
@@ -648,11 +802,59 @@
   function renderErrorApp() {
     const root = node('div', 'app-root error-dialog');
     const message = node('div', 'error-message');
-    message.append(node('span', 'error-symbol', '!'), node('p', '', errorMessage));
+    message.append(icon('error.svg', 'error-dialog-icon'), node('p', '', errorMessage));
     const actions = node('div', 'shutdown-actions');
     actions.append(button('OK', 'classic-button', { dataset: { errorOk: '' }, autofocus: '' }));
     root.append(message, actions);
     return root;
+  }
+
+  function renderPropertiesApp() {
+    const root = node('div', 'app-root properties-dialog');
+    const target = propertiesTarget || { appId: 'computer' };
+    const app = target.appId ? appConfig.registry[target.appId] : null;
+    const external = target.externalKey ? sourceLinks[target.externalKey] : '';
+    const descriptor = app || {
+      name: target.label || target.externalKey || 'Shortcut',
+      icon: target.icon || 'document.svg',
+      type: 'External shortcut',
+      description: 'Opens a configured portfolio resource in a new browser tab.',
+      details: () => [['Destination', external || 'Not configured'], ['Open behavior', 'New browser tab']],
+      actions: ['Open destination']
+    };
+    const heading = node('div', 'properties-heading');
+    heading.append(icon(descriptor.icon || 'computer.svg'), node('div', '', descriptor.name || descriptor.title));
+    root.append(heading);
+    const details = node('dl', 'property-grid properties-grid');
+    const status = app ? getPropertiesStatus(target.appId, app) : (external ? 'Configured' : 'Not configured');
+    const metadata = typeof descriptor.details === 'function' ? descriptor.details() : (descriptor.details || []);
+    const rows = [
+      ['Application', descriptor.name || descriptor.title],
+      ['Type', descriptor.type || 'Portfolio application'],
+      ['Description', descriptor.description || 'Portfolio application.'],
+      ['Current status', status],
+      ...metadata
+    ];
+    rows.forEach(([term, value]) => details.append(node('dt', '', term), node('dd', '', value)));
+    root.append(details);
+    const actions = node('section', 'properties-actions');
+    actions.append(node('strong', '', 'Available actions'));
+    const list = node('ul', 'list-bullets');
+    (descriptor.actions || []).forEach(action => list.append(node('li', '', action)));
+    if (!descriptor.actions?.length) list.append(node('li', '', 'Open the shortcut'));
+    actions.append(list);
+    root.append(actions);
+    const footer = node('div', 'properties-footer');
+    footer.append(node('small', '', 'Portfolio 95 application information'), button('Close', 'classic-button', { dataset: { closeWindow: 'properties', autofocus: '' } }));
+    root.append(footer);
+    return root;
+  }
+
+  function getPropertiesStatus(id, app) {
+    if (id === 'feedback') return feedbackSubmitted ? 'Submitted in this browser session' : 'Available';
+    const win = document.querySelector(`[data-app="${id}"]`);
+    const message = win?.querySelector('.window-status span:first-child')?.textContent.trim();
+    return message || app.status || 'Ready';
   }
 
   function renderConfirmApp() {
@@ -696,23 +898,26 @@
     const toolbar = node('div', 'resume-toolbar');
     const open = button('Open PDF', 'classic-button');
     open.addEventListener('click', () => window.open(data.resume.file, '_blank', 'noopener,noreferrer'));
-    const download = node('a', 'classic-button', 'Download PDF');
+    const textVersion = node('a', 'classic-button', 'Open text résumé');
+    textVersion.href = data.resume.htmlFile;
+    textVersion.target = '_blank';
+    textVersion.rel = 'noopener noreferrer';
+    const download = node('a', 'classic-button', 'Download PDF résumé');
     download.href = data.resume.file;
     download.download = '';
-    toolbar.append(open, download);
+    toolbar.append(open, textVersion, download);
     root.append(toolbar);
     const object = node('object', 'resume-object');
     object.dataset.resumeFile = data.resume.file;
     object.type = 'application/pdf';
     const fallback = node('div', 'resume-page');
-    fallback.append(node('h2', '', profile.name), node('p', 'resume-headline', profile.title), node('p', '', profile.summary));
+    fallback.append(node('h2', '', profile.name), node('p', 'resume-headline', profile.title), node('p', '', data.experienceSummary.exposure), node('p', '', data.experienceSummary.interests));
     fallback.append(node('p', '', data.resume.note));
-    const fallbackLink = node('a', '', 'Download the PDF résumé');
-    fallbackLink.href = data.resume.file;
-    fallbackLink.download = '';
+    const fallbackLink = node('a', '', 'Open the text résumé');
+    fallbackLink.href = data.resume.htmlFile;
     fallback.append(fallbackLink);
     object.append(fallback);
-    root.append(object, node('p', 'resume-warning', data.resume.note));
+    root.append(object, node('p', 'resume-warning', 'For screen readers and applicant tracking systems, use Open text résumé.'));
     return root;
   }
 
@@ -806,6 +1011,79 @@
     actions.append(button('OK', 'classic-button', { dataset: { contactNoticeOk: '' }, autofocus: '' }));
     root.append(copy, actions);
     return root;
+  }
+
+  function renderFeedbackApp() {
+    const root = node('div', 'app-root feedback-dialog');
+    root.append(node('p', 'feedback-message', "You've been here for 45 seconds. Either you're exploring or this setup is growing on you. 😄"));
+    root.append(node('p', 'feedback-question', "What's the verdict?"));
+    const actions = node('div', 'feedback-actions');
+    [
+      ['yes', '👍 Pretty cool!'],
+      ['no', '👎 Needs a reboot']
+    ].forEach(([value, label]) => {
+      const choice = button(label, 'classic-button feedback-choice', { dataset: { feedbackChoice: value } });
+      actions.append(choice);
+    });
+    root.append(actions);
+    const status = node('p', 'feedback-status');
+    status.dataset.feedbackStatus = '';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    root.append(status);
+    root.append(node('small', 'feedback-footnote', "No pressure. I won't take it personally."));
+    return root;
+  }
+
+  function setFeedbackStatus(message, state = '') {
+    const status = document.querySelector('[data-app="feedback"] [data-feedback-status]');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('is-error', state === 'error');
+  }
+
+  async function submitPortfolioFeedback(choice) {
+    if (!['yes', 'no'].includes(choice) || feedbackRequestInFlight) return;
+    const dialog = document.querySelector('[data-app="feedback"]');
+    const buttons = [...(dialog?.querySelectorAll('[data-feedback-choice]') || [])];
+    const endpoint = data.contact?.formspreeEndpoint || '';
+    if (!endpoint) {
+      setFeedbackStatus('Feedback is unavailable right now. Please try again later.', 'error');
+      return;
+    }
+
+    feedbackRequestInFlight = true;
+    buttons.forEach(item => { item.disabled = true; });
+    setFeedbackStatus('Sending your response...');
+    const payload = new FormData();
+    payload.set('liked_portfolio', choice);
+    payload.set('feedback_type', 'portfolio_feedback');
+    payload.set('page_url', window.location.href);
+    payload.set('timestamp', new Date().toISOString());
+    payload.set('submission_status', 'submitted');
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        body: payload
+      });
+      if (!response.ok) throw new Error('Feedback submission failed');
+      feedbackSubmitted = true;
+      try { sessionStorage.setItem(feedbackStorageKey, 'yes'); }
+      catch (_) { /* The successful response still suppresses the prompt in this page. */ }
+      const successMessage = choice === 'yes'
+        ? "Thanks! You're officially part of the cool people club."
+        : 'Fair enough. Back to the command line I go.';
+      setFeedbackStatus('');
+      window.portfolioWindows?.close('feedback');
+      showToast(successMessage);
+    } catch (_) {
+      setFeedbackStatus('Could not send your response. Please try again.', 'error');
+    } finally {
+      feedbackRequestInFlight = false;
+      buttons.forEach(item => { item.disabled = false; });
+    }
   }
 
   function showContactNotice(title, message, symbol = '!', focusControl = null) {
@@ -939,6 +1217,7 @@
     [
       ['Projects', 'folder.svg', 'projects'],
       ['Resume', 'document.svg', 'resume'],
+      ['Text Resume', 'document.svg', 'textResume'],
       ['GitHub', 'github.svg', 'github'],
       ['LinkedIn', 'linkedin.svg', 'linkedin']
     ].forEach(([label, iconName, target]) => {
@@ -989,7 +1268,8 @@
       profile.title,
       profile.location,
       '',
-      profile.summary,
+      data.experienceSummary.exposure,
+      data.experienceSummary.interests,
       '',
       'Explore this desktop:',
       '  My Computer   career files and portfolio folders',
@@ -1242,6 +1522,10 @@
   window.PORTFOLIO_APP_RENDERER = renderAppContent;
   window.addEventListener('portfolio:windows-ready', () => renderExplorer('My Computer', false));
   window.addEventListener('portfolio:window-open', event => {
+    if (event.detail?.id === 'feedback') {
+      feedbackPromptSeen = true;
+      stopFeedbackTimer();
+    }
     if (event.detail?.id !== 'resume') return;
     const object = window.portfolioWindows?.getWindow('resume')?.querySelector('.resume-object');
     if (object && object.dataset.loaded !== 'true') {
@@ -1261,6 +1545,8 @@
   });
   renderDesktopIcons();
   renderStartMenu();
+  menuRoot.addEventListener('scroll', repositionOpenStartSubmenus);
+  window.addEventListener('resize', repositionOpenStartSubmenus);
   applySettings();
 
   function openApp(id) {
@@ -1269,10 +1555,9 @@
       showToast('Choose a project folder first.');
       return;
     }
-    if (id === 'resume') { openResume(); return; }
+    if (id === 'resume') { closeStartMenu(); openResume(); return; }
     window.portfolioWindows?.open(id);
-    document.querySelector('[data-start-menu]').hidden = true;
-    document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
+    closeStartMenu();
   }
 
   function openResume() {
@@ -1285,19 +1570,44 @@
     fetch(data.resume.file, { method: 'HEAD', cache: 'no-store' }).then(response => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       window.portfolioWindows?.open('resume');
-      document.querySelector('[data-start-menu]').hidden = true;
-      document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
+      closeStartMenu();
     }).catch(error => {
       showErrorDialog(`Resume.pdf could not be opened (${error.message}). Check the configured file path.`);
     }).finally(() => { resumeCheckPending = false; });
   }
 
-  function showErrorDialog(message) {
+  function showErrorDialog(message, title = 'Error') {
+    if (!window.portfolioWindows?.getWindow('error')?.hidden) return;
     errorMessage = message;
-    document.querySelector('[data-start-menu]').hidden = true;
-    document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
+    errorTitle = title;
+    closeStartMenu();
     window.portfolioWindows?.rerender('error');
+    window.portfolioWindows?.setTitle('error', errorTitle);
     window.portfolioWindows?.open('error');
+  }
+
+  function showUnavailableError(label = '') {
+    const now = Date.now();
+    if (now - lastUnavailableErrorAt < 1100 || !window.portfolioWindows?.getWindow('error')?.hidden) return;
+    lastUnavailableErrorAt = now;
+    const messages = [
+      { title: 'System Error', message: "Well, that wasn't supposed to happen. Try another icon." },
+      { title: 'Error 404: Motivation Not Found', message: 'This feature is still looking for its floppy disk.' },
+      { title: 'Windows 95 Says...', message: 'I tried my best. My best was apparently not enough.' },
+      { title: 'Access Denied', message: "Nice try. This button doesn't have a job yet." },
+      { title: 'Unexpected Behaviour', message: 'The computer has entered a brief period of self-reflection.' }
+    ];
+    const variant = messages[unavailableErrorIndex++ % messages.length];
+    showErrorDialog(variant.message, variant.title);
+  }
+
+  function showProperties(target) {
+    if (!target) return;
+    propertiesTarget = target;
+    const app = target.appId && appConfig.registry[target.appId];
+    window.portfolioWindows?.rerender('properties');
+    window.portfolioWindows?.setTitle('properties', `${app?.name || target.label || 'Shortcut'} Properties`);
+    window.portfolioWindows?.open('properties');
   }
 
   function openCertificate(index) {
@@ -1379,6 +1689,29 @@
     showToast.timer = window.setTimeout(() => { toast.hidden = true; }, 3000);
   }
 
+  function stopFeedbackTimer() {
+    if (feedbackTimer === null) return;
+    window.clearInterval(feedbackTimer);
+    feedbackTimer = null;
+  }
+
+  function startFeedbackTimer() {
+    if (feedbackSubmitted || feedbackPromptSeen || feedbackTimer !== null) return;
+    feedbackLastTick = Date.now();
+    feedbackTimer = window.setInterval(() => {
+      const now = Date.now();
+      if (!document.hidden) feedbackActiveMs += Math.max(0, now - feedbackLastTick);
+      feedbackLastTick = now;
+      if (feedbackActiveMs < 45000 || feedbackSubmitted || feedbackPromptSeen) return;
+      if (document.querySelector('.window.is-modal:not([hidden])')) return;
+      feedbackPromptSeen = true;
+      stopFeedbackTimer();
+      window.portfolioWindows?.open('feedback');
+    }, 1000);
+  }
+
+  document.addEventListener('visibilitychange', () => { feedbackLastTick = Date.now(); });
+
   function showContextMenu(x, y, items, target = null) {
     contextTarget = target;
     contextMenu.replaceChildren();
@@ -1393,8 +1726,11 @@
     });
     contextMenu.hidden = false;
     const rect = desktop.getBoundingClientRect();
-    const left = Math.max(4, Math.min(x - rect.left, rect.width - 215));
-    const top = Math.max(4, Math.min(y - rect.top, rect.height - 240));
+    contextMenu.style.left = '4px';
+    contextMenu.style.top = '4px';
+    const menuRect = contextMenu.getBoundingClientRect();
+    const left = Math.max(4, Math.min(x - rect.left, rect.width - menuRect.width - 4));
+    const top = Math.max(4, Math.min(y - rect.top, rect.height - menuRect.height - 4));
     contextMenu.style.left = `${left}px`;
     contextMenu.style.top = `${top}px`;
     contextMenu.querySelector('button:not(:disabled)')?.focus();
@@ -1412,6 +1748,42 @@
     const text = contextTarget?.label || contextTarget?.id || '';
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => showToast(`Copied ${text}.`)).catch(() => showToast('Clipboard access is unavailable.'));
     else showToast(`Selected: ${text}`);
+  }
+
+  function showShortcutContextMenu(shortcut, x, y) {
+    if (!shortcut) return;
+    showContextMenu(x, y, [
+      { label: 'Open', action: 'open' },
+      { separator: true },
+      { label: 'Copy Shortcut', action: 'copy' },
+      { label: 'Properties', action: 'shortcut-properties' }
+    ], {
+      type: 'shortcut',
+      appId: shortcut.dataset.shortcutApp || '',
+      externalKey: shortcut.dataset.shortcutExternal || '',
+      label: shortcut.dataset.shortcutLabel || shortcut.textContent.trim(),
+      icon: shortcut.querySelector('img')?.getAttribute('src')?.split('/').pop()
+    });
+  }
+
+  function showWindowContextMenu(win, x, y, fromTaskbar = false) {
+    if (!win) return;
+    const id = win.dataset.app;
+    const minimized = win.classList.contains('is-minimized');
+    const maximized = win.classList.contains('is-maximized');
+    const active = win.classList.contains('is-active');
+    const isDialog = Boolean(appConfig.registry[id]?.dialog);
+    const items = [];
+    if (!isDialog) {
+      items.push({ label: minimized ? 'Restore' : active ? 'Minimize' : 'Switch to', action: minimized ? 'window-restore' : active ? 'window-minimize' : 'window-focus' });
+      items.push({ label: maximized ? 'Restore' : 'Maximize', action: 'window-maximize' });
+      items.push({ label: 'Close', action: 'window-close' });
+      items.push({ separator: true });
+      items.push({ label: 'Properties', action: 'window-properties' });
+    } else {
+      items.push({ label: 'Close', action: 'window-close' });
+    }
+    showContextMenu(x, y, items, { type: fromTaskbar ? 'taskbar-window' : 'window', id, label: appConfig.registry[id]?.name || id });
   }
 
   function deleteContextItem() {
@@ -1466,8 +1838,30 @@
   }
 
   document.addEventListener('click', event => {
+    const unavailable = event.target.closest('[data-unavailable]');
+    if (unavailable) {
+      hideContextMenu();
+      showUnavailableError(unavailable.dataset.unavailableLabel || unavailable.textContent.trim());
+      return;
+    }
+
+    const feedbackChoice = event.target.closest('[data-feedback-choice]');
+    if (feedbackChoice) {
+      void submitPortfolioFeedback(feedbackChoice.dataset.feedbackChoice);
+      return;
+    }
+
     if (event.target.closest('[data-contact-notice-ok]')) {
       window.portfolioWindows?.close('contactNotice');
+      return;
+    }
+    const shortcutMenu = event.target.closest('[data-shortcut-menu]');
+    if (shortcutMenu) {
+      const shortcut = shortcutMenu.closest('.desktop-shortcut')?.querySelector('[data-shortcut]');
+      if (shortcut) {
+        const rect = shortcutMenu.getBoundingClientRect();
+        showShortcutContextMenu(shortcut, rect.left, rect.bottom + 2);
+      }
       return;
     }
     const shortcut = event.target.closest('[data-shortcut]');
@@ -1486,8 +1880,7 @@
     const external = event.target.closest('[data-open-external]');
     if (external) {
       openExternal(external.dataset.openExternal);
-      document.querySelector('[data-start-menu]').hidden = true;
-      document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
+      closeStartMenu();
       return;
     }
     const project = event.target.closest('[data-open-project]');
@@ -1527,8 +1920,15 @@
         else if (contextTarget?.type === 'recycle') openRecycleItem(recycleItems[Number(contextTarget.id)]);
         else if (contextTarget?.type === 'certificate') openCertificate(contextTarget.id);
         else if (contextTarget?.type === 'experience') openApp('experience');
-        else if (contextTarget?.type === 'shortcut') contextTarget.external ? openExternal(contextTarget.external) : openApp(contextTarget.app);
+        else if (contextTarget?.type === 'shortcut') contextTarget.externalKey ? openExternal(contextTarget.externalKey) : openApp(contextTarget.appId);
       }
+      if (action === 'shortcut-properties') showProperties(contextTarget);
+      if (action === 'window-properties') showProperties({ appId: contextTarget?.id, label: contextTarget?.label });
+      if (action === 'window-restore') window.portfolioWindows?.restore(contextTarget?.id);
+      if (action === 'window-focus') window.portfolioWindows?.focus(contextTarget?.id);
+      if (action === 'window-minimize') window.portfolioWindows?.minimize(contextTarget?.id);
+      if (action === 'window-maximize') window.portfolioWindows?.maximize(contextTarget?.id);
+      if (action === 'window-close') window.portfolioWindows?.close(contextTarget?.id);
       if (action === 'copy') copyContextItem();
       if (action === 'delete') deleteContextItem();
       if (action === 'file-properties') {
@@ -1555,8 +1955,11 @@
     if (parent) {
       const submenu = parent.parentElement.querySelector('.start-submenu');
       const expanded = parent.getAttribute('aria-expanded') === 'true';
+      if (!expanded) closeStartSubmenus(parent);
       parent.setAttribute('aria-expanded', String(!expanded));
       submenu.hidden = expanded;
+      submenu.classList.toggle('is-open', !expanded);
+      if (!expanded) positionStartSubmenu(parent, submenu);
       return;
     }
 
@@ -1604,19 +2007,19 @@
     if (event.target.closest('[data-start]')) {
       const startMenu = document.querySelector('[data-start-menu]');
       const expanded = event.target.closest('[data-start]').getAttribute('aria-expanded') === 'true';
-      startMenu.hidden = expanded;
-      event.target.closest('[data-start]').setAttribute('aria-expanded', String(!expanded));
-      if (!expanded) startMenu.querySelector('.start-row')?.focus();
       hideContextMenu();
+      if (expanded) closeStartMenu();
+      else {
+        closeStartSubmenus();
+        startMenu.hidden = false;
+        event.target.closest('[data-start]').setAttribute('aria-expanded', 'true');
+        startMenu.querySelector('.start-row')?.focus();
+      }
       return;
     }
 
     const inMenu = event.target.closest('[data-start-menu]');
-    if (!inMenu) {
-      const startMenu = document.querySelector('[data-start-menu]');
-      startMenu.hidden = true;
-      document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
-    }
+    if (!inMenu) closeStartMenu();
     if (!event.target.closest('[data-context-menu]')) hideContextMenu();
   });
 
@@ -1659,6 +2062,18 @@
   });
 
   document.addEventListener('contextmenu', event => {
+    const taskbarApp = event.target.closest('.taskbar-app');
+    if (taskbarApp) {
+      event.preventDefault();
+      showWindowContextMenu(window.portfolioWindows?.getWindow(taskbarApp.dataset.taskbarApp), event.clientX, event.clientY, true);
+      return;
+    }
+    const titleBar = event.target.closest('.title-bar');
+    if (titleBar) {
+      event.preventDefault();
+      showWindowContextMenu(titleBar.closest('.window'), event.clientX, event.clientY);
+      return;
+    }
     const file = event.target.closest('[data-context-file]');
     if (file) {
       event.preventDefault();
@@ -1683,9 +2098,7 @@
       event.preventDefault();
       const shortcut = event.target.closest('[data-shortcut]');
       if (shortcut) {
-        showContextMenu(event.clientX, event.clientY, [
-          { label: 'Open', action: 'open' }, { separator: true }, { label: 'Copy', action: 'copy' }, { label: 'Properties', disabled: true }
-        ], { type: 'shortcut', app: shortcut.dataset.shortcutApp, external: shortcut.dataset.shortcutExternal, label: shortcut.dataset.shortcutLabel });
+        showShortcutContextMenu(shortcut, event.clientX, event.clientY);
       } else {
         showContextMenu(event.clientX, event.clientY, [
           { label: 'Arrange Icons by Name', action: 'arrange' }, { label: 'Refresh', action: 'refresh' },
@@ -1733,8 +2146,7 @@
     }
     if (event.key === 'Escape') {
       hideContextMenu();
-      document.querySelector('[data-start-menu]').hidden = true;
-      document.querySelector('[data-start]').setAttribute('aria-expanded', 'false');
+      closeStartMenu();
     }
     if ((event.key === 'Enter' || event.key === ' ') && target?.matches('[data-shortcut]')) {
       event.preventDefault();
@@ -1749,15 +2161,21 @@
         const childMenu = menuItem.parentElement.querySelector('.start-submenu');
         if (childMenu) {
           event.preventDefault();
+          closeStartSubmenus(menuItem);
           childMenu.hidden = false;
+          childMenu.classList.add('is-open');
           menuItem.setAttribute('aria-expanded', 'true');
+          positionStartSubmenu(menuItem, childMenu);
           childMenu.querySelector('[role="menuitem"]')?.focus();
         }
       } else if (event.key === 'ArrowLeft' && submenu) {
         event.preventDefault();
-        submenu.hidden = true;
         const parent = submenu.parentElement.querySelector('[data-start-parent]');
-        parent?.setAttribute('aria-expanded', 'false');
+        if (parent) {
+          parent.setAttribute('aria-expanded', 'false');
+          submenu.hidden = true;
+          submenu.classList.remove('is-open');
+        }
         parent?.focus();
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
         const focusable = [...menu.querySelectorAll('[role="menuitem"]')].filter(item => !item.disabled && item.getClientRects().length);
@@ -1769,10 +2187,11 @@
         }
       }
     }
-    if (event.shiftKey && event.key === 'F10' && target?.matches('[data-context-file]')) {
-      const box = target.getBoundingClientRect();
+    const keyboardContextTarget = target?.closest('[data-context-file], [data-shortcut], .taskbar-app, .title-bar');
+    if (event.shiftKey && event.key === 'F10' && keyboardContextTarget) {
+      const box = keyboardContextTarget.getBoundingClientRect();
       event.preventDefault();
-      target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: box.left + 10, clientY: box.top + 10 }));
+      keyboardContextTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: box.left + 10, clientY: box.top + 10 }));
     }
   });
 
@@ -1806,6 +2225,7 @@
     if (document.querySelector('[data-safe-screen]').hidden) {
       window.portfolioWindows?.open('system');
       showToast(`Welcome, ${profile.name}.`);
+      startFeedbackTimer();
     }
   }
 

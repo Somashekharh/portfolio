@@ -8,7 +8,7 @@
   const startButton = document.querySelector('[data-start]');
   const windows = new Map();
   let zIndexCounter = 10;
-  let openOrder = 0;
+  let windowOpenSequence = 0;
   let activeWindowId = null;
   let modalShield = null;
   let modalReturnId = null;
@@ -145,6 +145,29 @@
     const rect = layer.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom };
   }
+  const lastGeometry = new Map();
+  let previousWorkArea = null;
+  function windowSize(win) {
+    return {
+      width: win.offsetWidth || parseFloat(win.style.width) || 420,
+      height: win.offsetHeight || parseFloat(win.style.height) || 320
+    };
+  }
+  function saveWindowGeometry(win, area = workArea()) {
+    if (!win || win.classList.contains('is-maximized')) return;
+    const rect = win.getBoundingClientRect();
+    const size = windowSize(win);
+    const left = Number.parseFloat(win.style.left);
+    const top = Number.parseFloat(win.style.top);
+    lastGeometry.set(win.dataset.window, {
+      left: Number.isFinite(left) ? left : rect.left - area.left,
+      top: Number.isFinite(top) ? top : rect.top - area.top,
+      width: size.width,
+      height: size.height,
+      areaWidth: area.width,
+      areaHeight: area.height
+    });
+  }
   function getOpenModal() {
     for (const [id, win] of windows) if (registry[id].modal && !win.hidden) return id;
     return null;
@@ -153,72 +176,85 @@
   function fitWindowToWorkArea(id) {
     const win = getWindow(id);
     const app = registry[id];
-    if (!win || !app || window.matchMedia('(max-width: 650px)').matches) return;
+    if (!win || !app) return;
     const area = workArea();
-    const maxWidth = Math.max(180, area.width - 16);
-    const maxHeight = Math.max(150, area.height - 10);
+    const margin = window.matchMedia('(max-width: 650px)').matches ? 4 : 8;
+    const maxWidth = Math.max(1, area.width - margin * 2);
+    const maxHeight = Math.max(1, area.height - margin * 2);
+    const width = win.dataset.userSized === 'true' ? parseFloat(win.style.width) || app.defaultWidth : app.defaultWidth;
+    const height = win.dataset.userSized === 'true' ? parseFloat(win.style.height) || app.defaultHeight : app.defaultHeight;
     win.style.minWidth = `${Math.min(app.minWidth, maxWidth)}px`;
     win.style.minHeight = `${Math.min(app.minHeight, maxHeight)}px`;
-    win.style.width = `${Math.min(parseFloat(win.style.width) || app.defaultWidth, maxWidth)}px`;
-    win.style.height = `${Math.min(parseFloat(win.style.height) || app.defaultHeight, maxHeight)}px`;
+    win.style.width = `${Math.min(width, maxWidth)}px`;
+    win.style.height = `${Math.min(height, maxHeight)}px`;
   }
 
-  function intersectionArea(a, b) {
-    const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
-    const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
-    return width * height;
+  function getCenteredWindowPosition(width, height, cascadeOffset = 0) {
+    const area = workArea();
+    const maxX = Math.max(0, area.width - width);
+    const maxY = Math.max(0, area.height - height);
+    const offset = Number(cascadeOffset) || 0;
+    const centeredX = Math.round((area.width - width) / 2) + offset;
+    const centeredY = Math.round((area.height - height) / 2) + offset;
+    return {
+      left: Math.max(0, Math.min(maxX, centeredX)),
+      top: Math.max(0, Math.min(maxY, centeredY))
+    };
   }
 
   function getBestWindowPosition(winOrId) {
     const win = typeof winOrId === 'string' ? getWindow(winOrId) : winOrId;
-    const area = workArea();
-    const width = win.offsetWidth || parseFloat(win.style.width) || 420;
-    const height = win.offsetHeight || parseFloat(win.style.height) || 320;
-    const margin = window.matchMedia('(max-width: 650px)').matches ? 4 : 12;
-    const minX = Math.max(0, margin);
-    const minY = Math.max(0, margin);
-    const maxX = Math.max(minX, area.width - width - margin);
-    const maxY = Math.max(minY, area.height - height - margin);
-    const centerX = Math.max(minX, Math.min(maxX, (area.width - width) / 2));
-    const centerY = Math.max(minY, Math.min(maxY, (area.height - height) / 2));
-    const openWindows = [...windows.entries()].filter(([id, item]) => id !== win?.dataset.window && !item.hidden && !item.classList.contains('is-minimized'));
+    const size = win ? windowSize(win) : { width: 420, height: 320 };
+    return getCenteredWindowPosition(size.width, size.height);
+  }
 
-    if (!openWindows.length || window.matchMedia('(max-width: 650px)').matches) return { left: centerX, top: centerY };
+  function centerWindow(win, cascadeOffset = 0) {
+    const size = windowSize(win);
+    const position = getCenteredWindowPosition(size.width, size.height, cascadeOffset);
+    win.style.left = `${position.left}px`;
+    win.style.top = `${position.top}px`;
+  }
 
-    const step = 30;
-    const preferred = {
-      left: Math.max(minX, Math.min(maxX, centerX + openOrder * step)),
-      top: Math.max(minY, Math.min(maxY, centerY + openOrder * step))
-    };
-    const xs = new Set([minX, maxX, centerX, preferred.left]);
-    const ys = new Set([minY, maxY, centerY, preferred.top]);
-    for (let x = minX; x <= maxX; x += step) xs.add(x);
-    for (let y = minY; y <= maxY; y += step) ys.add(y);
+  function arrangeCenteredWindows(area = workArea()) {
+    const margin = window.matchMedia('(max-width: 650px)').matches ? 4 : 8;
+    const open = [...windows.entries()]
+      .filter(([id, win]) => !registry[id].dialog && !win.hidden && win.dataset.positionMode === 'centered' && !win.classList.contains('is-maximized'))
+      .sort((a, b) => Number(a[1].dataset.openSequence) - Number(b[1].dataset.openSequence));
+    if (!open.length) return;
+    open.forEach(([id]) => fitWindowToWorkArea(id));
 
-    let best = preferred;
-    let bestScore = Infinity;
-    const candidateArea = width * height || 1;
-    for (const left of xs) {
-      for (const top of ys) {
-        const candidate = { left, top, right: left + width, bottom: top + height };
-        let overlapRatio = 0;
-        let titlebarOcclusion = 0;
-        let completeCover = 0;
-        openWindows.forEach(([, existing]) => {
-          const rect = existing.getBoundingClientRect();
-          const overlap = intersectionArea(candidate, rect);
-          const existingArea = Math.max(1, rect.width * rect.height);
-          overlapRatio += overlap / candidateArea;
-          if (overlap >= Math.min(candidateArea, existingArea) * 0.8) completeCover += 1;
-          const titlebar = existing.querySelector('.title-bar')?.getBoundingClientRect();
-          if (titlebar) titlebarOcclusion += intersectionArea(candidate, titlebar) / Math.max(1, titlebar.width * titlebar.height);
-        });
-        const drift = Math.hypot(left - preferred.left, top - preferred.top) / Math.max(1, Math.hypot(area.width, area.height));
-        const score = titlebarOcclusion * 5000 + completeCover * 1000 + overlapRatio * 18 + drift * 3;
-        if (score < bestScore) { bestScore = score; best = { left, top }; }
-      }
+    let step = 30;
+    let maxBase = Infinity;
+    while (step >= 0) {
+      maxBase = Math.min(...open.map(([, win], index) => area.height - windowSize(win).height - margin - index * step));
+      if (maxBase >= margin || step === 0) break;
+      step -= 1;
     }
-    return { left: Math.round(best.left), top: Math.round(best.top) };
+    const desiredBase = open.reduce((sum, [, win], index) => (
+      sum + (Math.round((area.height - windowSize(win).height) / 2) - index * step)
+    ), 0) / open.length;
+    const base = Math.round(Math.max(margin, Math.min(maxBase, desiredBase)));
+    open.forEach(([, win], index) => {
+      const size = windowSize(win);
+      const maxX = Math.max(0, area.width - size.width);
+      const centeredX = Math.round((area.width - size.width) / 2);
+      const horizontalNudge = Math.min(index, 4) * 12;
+      win.style.left = `${Math.max(0, Math.min(maxX, centeredX + horizontalNudge))}px`;
+      win.style.top = `${Math.max(0, Math.min(area.height - size.height, base + index * step))}px`;
+      saveWindowGeometry(win, area);
+    });
+  }
+
+  function positionManuallyPlacedWindow(win, geometry, area = workArea()) {
+    const size = windowSize(win);
+    const maxX = Math.max(0, area.width - size.width);
+    const maxY = Math.max(0, area.height - size.height);
+    const oldMaxX = Math.max(0, geometry.areaWidth - geometry.width);
+    const oldMaxY = Math.max(0, geometry.areaHeight - geometry.height);
+    const relativeX = oldMaxX ? geometry.left / oldMaxX : 0.5;
+    const relativeY = oldMaxY ? geometry.top / oldMaxY : 0.5;
+    win.style.left = `${Math.round(Math.max(0, Math.min(maxX, relativeX * maxX)))}px`;
+    win.style.top = `${Math.round(Math.max(0, Math.min(maxY, relativeY * maxY)))}px`;
   }
 
   function addModalShield() {
@@ -310,18 +346,19 @@
     win.classList.remove('is-minimized');
     if (firstOpen) {
       fitWindowToWorkArea(id);
-      const position = getBestWindowPosition(win);
-      win.style.left = `${position.left}px`;
-      win.style.top = `${position.top}px`;
+      centerWindow(win);
       win.style.transform = 'none';
       win.dataset.positioned = 'true';
-      openOrder += 1;
+      win.dataset.positionMode = 'centered';
+      win.dataset.openSequence = String(++windowOpenSequence);
+      saveWindowGeometry(win);
     }
     if (app.modal && !currentModal) {
       modalReturnId = activeWindowId && activeWindowId !== id ? activeWindowId : null;
       addModalShield();
     }
     focus(id);
+    if (firstOpen && !app.dialog) arrangeCenteredWindows();
     if (app.modal && wasHidden) window.requestAnimationFrame(() => focusModalContent(id));
     window.dispatchEvent(new CustomEvent('portfolio:window-open', { detail: { id, window: win } }));
     return win;
@@ -342,7 +379,11 @@
     win.style.removeProperty('top');
     win.style.transform = '';
     delete win.dataset.positioned;
+    delete win.dataset.positionMode;
+    delete win.dataset.openSequence;
+    delete win.dataset.userSized;
     delete win.dataset.restoreStyle;
+    lastGeometry.delete(win.dataset.window);
     const maximize = win.querySelector('[data-maximize]');
     maximize?.classList.remove('is-restored');
     maximize?.setAttribute('aria-label', 'Maximize window');
@@ -409,6 +450,7 @@
     if (!win || win.hidden || registry[id].resizable === false || getOpenModal() && getOpenModal() !== id) return;
     const maximize = win.querySelector('[data-maximize]');
     if (!win.classList.contains('is-maximized')) {
+      saveWindowGeometry(win);
       win.dataset.restoreStyle = JSON.stringify({
         left: win.style.left,
         top: win.style.top,
@@ -428,7 +470,15 @@
         Object.entries(saved).forEach(([key, value]) => { win.style[key] = value; });
       } catch (_) { /* Keep the current size if no saved window geometry is available. */ }
       delete win.dataset.restoreStyle;
-      clampToWorkArea(win);
+      fitWindowToWorkArea(id);
+      if (win.dataset.positionMode === 'centered') {
+        centerWindow(win, Number(win.dataset.cascadeOffset) || 0);
+      } else {
+        const geometry = lastGeometry.get(id);
+        if (geometry) positionManuallyPlacedWindow(win, geometry);
+        else clampToWorkArea(win);
+      }
+      saveWindowGeometry(win);
       maximize?.classList.remove('is-restored');
       maximize?.setAttribute('aria-label', 'Maximize window');
     }
@@ -436,16 +486,43 @@
   }
 
   function clampToWorkArea(win) {
-    if (!win || win.hidden || win.classList.contains('is-maximized') || window.matchMedia('(max-width: 650px)').matches) return;
+    if (!win || win.hidden || win.classList.contains('is-maximized') || win.classList.contains('is-minimized')) return;
     const id = win.dataset.window;
     fitWindowToWorkArea(id);
     const area = workArea();
     const rect = win.getBoundingClientRect();
-    const left = Math.max(0, Math.min(area.width - rect.width, rect.left - area.left));
-    const top = Math.max(0, Math.min(area.height - rect.height, rect.top - area.top));
+    const size = windowSize(win);
+    const leftValue = Number.parseFloat(win.style.left);
+    const topValue = Number.parseFloat(win.style.top);
+    const currentLeft = Number.isFinite(leftValue) ? leftValue : rect.left - area.left;
+    const currentTop = Number.isFinite(topValue) ? topValue : rect.top - area.top;
+    const left = Math.max(0, Math.min(area.width - size.width, currentLeft));
+    const top = Math.max(0, Math.min(area.height - size.height, currentTop));
     win.style.left = `${left}px`;
     win.style.top = `${top}px`;
     win.style.transform = 'none';
+  }
+
+  function handleViewportResize() {
+    const area = workArea();
+    windows.forEach((win, id) => {
+      if (win.hidden || !win.dataset.positioned || win.classList.contains('is-maximized')) return;
+      const geometry = lastGeometry.get(id) || {
+        left: Number.parseFloat(win.style.left) || 0,
+        top: Number.parseFloat(win.style.top) || 0,
+        ...windowSize(win),
+        areaWidth: previousWorkArea?.width || area.width,
+        areaHeight: previousWorkArea?.height || area.height
+      };
+      fitWindowToWorkArea(id);
+      if (win.dataset.positionMode === 'centered') {
+        centerWindow(win, Number(win.dataset.cascadeOffset) || 0);
+      } else {
+        positionManuallyPlacedWindow(win, geometry, area);
+      }
+      saveWindowGeometry(win, area);
+    });
+    previousWorkArea = area;
   }
 
   function setTitle(id, title) {
@@ -484,7 +561,8 @@
     removeModalShield();
     modalReturnId = null;
     activeWindowId = null;
-    openOrder = 0;
+    lastGeometry.clear();
+    previousWorkArea = workArea();
     hideWindowMenus();
     updateTaskbar();
     window.dispatchEvent(new CustomEvent('portfolio:windows-reset'));
@@ -565,7 +643,6 @@
 
   function startWindowDrag(win, titlebar, event) {
     if (event.button !== 0 || event.target.closest('button') || win.classList.contains('is-maximized') || registry[win.dataset.window].dialog) return;
-    if (window.matchMedia('(max-width: 650px)').matches) return;
     const area = workArea();
     const bounds = win.getBoundingClientRect();
     const grabX = event.clientX - bounds.left;
@@ -581,11 +658,13 @@
       const nextTop = Math.max(0, Math.min(maxY, moveEvent.clientY - area.top - grabY));
       win.style.left = `${nextLeft}px`;
       win.style.top = `${nextTop}px`;
+      win.dataset.positionMode = 'manual';
     };
     const stop = () => {
       titlebar.removeEventListener('pointermove', move);
       titlebar.removeEventListener('pointerup', stop);
       titlebar.removeEventListener('pointercancel', stop);
+      if (win.dataset.positionMode === 'manual') saveWindowGeometry(win);
     };
     titlebar.addEventListener('pointermove', move);
     titlebar.addEventListener('pointerup', stop);
@@ -597,7 +676,7 @@
     open, close, focus, minimize, maximize: toggleMaximize, restore, reset, setTitle, setStatus, rerender,
     openWindow: open, closeWindow: close, focusWindow: focus, minimizeWindow: minimize,
     maximizeWindow: maximize, restoreWindow: restore, calculateWindowPosition: getBestWindowPosition,
-    getBestWindowPosition,
+    getBestWindowPosition, getCenteredWindowPosition,
     getActiveWindow: () => activeWindowId,
     getWindow: id => getWindow(id)
   };
@@ -620,12 +699,25 @@
   });
   document.addEventListener('keydown', handleKeydown);
   windows.forEach((win, id) => {
-    win.addEventListener('pointerdown', () => focus(id));
+    win.addEventListener('pointerdown', event => {
+      focus(id);
+      const bounds = win.getBoundingClientRect();
+      if (registry[id].resizable !== false && event.clientX >= bounds.right - 18 && event.clientY >= bounds.bottom - 18) {
+        win.dataset.userSized = 'true';
+      }
+    });
+    win.addEventListener('pointerup', () => {
+      if (win.dataset.userSized === 'true' && !win.classList.contains('is-maximized')) {
+        clampToWorkArea(win);
+        saveWindowGeometry(win);
+      }
+    });
     const titlebar = win.querySelector('[data-drag-handle]');
     titlebar.addEventListener('dblclick', event => {
       if (!event.target.closest('button')) toggleMaximize(id);
     });
     titlebar.addEventListener('pointerdown', event => startWindowDrag(win, titlebar, event));
   });
-  window.addEventListener('resize', () => windows.forEach(clampToWorkArea));
+  previousWorkArea = workArea();
+  window.addEventListener('resize', handleViewportResize);
 })();
